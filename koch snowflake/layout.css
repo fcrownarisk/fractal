@@ -1,0 +1,56 @@
+body {
+	color: #000;
+	text-decoration: none;
+}
+
+h1 {
+	text-align:center;
+	margin-top: -10px;
+}
+
+#kochCanvas {
+	border:1px solid #000000; 
+	margin-left: auto;
+	margin-right: auto;
+	display: block;
+}
+
+.hint {
+	width: 780px;
+	margin-left: auto;
+	margin-right: auto;
+	display: block;
+	font: 18px "Myriat Pro", sans-serif;
+	text-align: center;
+/*	padding-top: 2px;
+	padding-bottom: 2px;*/
+}
+
+.info {
+	width: 780px;
+	margin-left: auto;
+	margin-right: auto;
+	display: block;
+	font: 14px "Myriat Pro", sans-serif;
+	text-align: center;
+/*	padding-top: 2px;
+	padding-bottom: 2px;*/
+}
+
+input {
+	font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+	border:1px solid #ccc;
+	width:80px;
+	-webkit-border-radius:5px;
+	-moz-border-radius:5px;
+	-o-border-radius:5px;
+	-ms-border-radius:5px;
+	border-radius:5px;
+	margin-bottom: 5px;
+	margin-left: 2px;
+}
+
+:disabled {
+	background: #fff;
+	color: black;
+}

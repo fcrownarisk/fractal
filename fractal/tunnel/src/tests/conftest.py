@@ -21,9 +21,7 @@
 # limitations under the License.
 
 import logging
-
 import pytest
-
 
 # Globally available fixtures
 @pytest.fixture(scope='session')

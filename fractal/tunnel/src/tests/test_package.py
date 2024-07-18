@@ -16,9 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from __future__ import absolute_import
-
 from timetunnel import __version__ as version
-
 
 def test_semver():
     """Test a proper semantic version is used."""
